@@ -1,12 +1,10 @@
 # Báo cáo Lab: Self evolving Agentic
 
-> Sao chép tệp này thành `report/REPORT.md` (đã làm ở Phần 0) và điền dần qua các Phần của lab. Xóa các dòng hướng dẫn dạng trích dẫn (bắt đầu bằng `>`). Văn phong kỹ thuật, ngắn gọn, mọi nhận định đi kèm số liệu hoặc bằng chứng. Trong buổi học: điền mục 1 đến 7 (bản nháp). Sau buổi học: hoàn thiện mục 8 đến 10.
-
 ## 1. Thông tin nhóm và cấu hình
 
 | Họ tên | Mã sinh viên | Phần đóng góp |
 |---|---|---|
-| | | |
+| Nguyễn Văn Việt | 2A202602904 | Toàn bộ: harness, thí nghiệm, curator, đánh giá và báo cáo. |
 
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: OpenAI, `openai:gpt-4.1-mini`, nhiệt độ 0, `recursion_limit=40`. Vòng thăm dò bằng `gpt-4o-mini` bị loại khỏi kết quả chính và lưu trong `results/gpt-4o-mini-archive/` vì model thường bỏ qua skill và hai lần bị recursion.
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: Deep Agents 0.7.21; Windows, chạy trực tiếp trong `.venv`.
@@ -21,9 +19,9 @@
 
 ## 3. Làm quen Deep Agents (Phần 0.3)
 
-1.
-2.
-3.
+1. Tác tử mặc định thấy chín tool: `ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `execute` và `task`. Tool `execute` chạy lệnh shell trong sandbox.
+2. `task` mô tả `general-purpose` là subagent dùng cho nghiên cứu câu hỏi phức tạp, tìm file/nội dung và tác vụ nhiều bước; nó có cùng tập tool với tác tử chính. Mỗi lần gọi mặc định là stateless, chỉ thấy prompt được giao chứ không tự kế thừa hội thoại/ngữ cảnh của tác tử chính, rồi trả về một báo cáo cuối.
+3. System prompt mặc định in ra là chuỗi rỗng. Hướng dẫn hành vi từ `task`: “Each invocation is stateless by default: the agent sees only the prompt you give it”. Hướng dẫn từ `execute`: “You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search.”
 
 ## 4. Đường cơ sở và phân loại lỗi (Phần 2.2)
 
@@ -97,29 +95,33 @@ Lượt đầu của `baseline/data-eval` chạm `GraphRecursionError` ở giớ
 
 ## 8. Phân tích
 
-> Trả lời từng câu bằng số liệu từ mục 7 và bằng chứng từ vết. Kết quả âm hoặc không có khác biệt vẫn hợp lệ nếu được phân tích tốt.
+1. Không điều kiện nào cải thiện tập học so với baseline: `skills-auto` hòa 0,45, còn `subagents` giảm xuống 0,41 do `logs-learn` từ 1/9 xuống 0/9. Trên eval, `skills-auto` cũng chỉ hòa baseline ở 0,33; `subagents` thấp hơn ở 0,25. Vì không có mẫu “tăng trên learn nhưng không tăng trên eval”, số điểm không trực tiếp chứng minh quá khớp; chúng cho thấy cả H1 (baseline không thua subagents) và H2 (skills-auto xấp xỉ baseline) được ủng hộ. H3 cũng đúng: từ learn sang eval, baseline và skills-auto giảm 0,12, subagents giảm 0,16.
 
-1. So với `baseline`, điều kiện nào cải thiện điểm tác vụ **học**? Điều kiện nào cải thiện điểm tác vụ **đánh giá**? Có điều kiện nào cải thiện tác vụ học nhưng không cải thiện tác vụ đánh giá? Nếu có, đó là dấu hiệu gì?
-2. Tách điểm thành check kỹ thuật và check quy ước (`rule_`). Skill do curator sinh giúp nhóm check nào? Check quy ước **mới** của tác vụ đánh giá có được skill giúp không, và vì sao?
-3. Dựa vào vết và `skills_read`, giải thích một check mà skill giúp đạt và một check mà skill không giúp (skill chưa được đọc, đọc nhưng không làm theo, skill thiếu hoặc sai).
-4. Chi phí: so sánh số token trung bình giữa các điều kiện. Điều kiện nào có hiệu quả tốt nhất theo điểm trên mỗi token? Đa tác tử có đáng chi phí trong thí nghiệm này không?
-5. Có dấu hiệu rò rỉ dữ liệu hoặc quá khớp nào trong skill sinh ra không? Nhóm đã phòng tránh như thế nào?
-6. Nhiễu: so sánh điểm tác vụ học của cùng bộ skill ở Phần 3.4 (đã sao lưu) và sau đóng băng. Chênh lệch bao nhiêu? Nó cho biết điều gì về độ tin cậy của các chênh lệch trong bảng ở mục 7?
+2. `skills-auto` hòa baseline ở check kỹ thuật: 12/18 trên learn và 10/18 trên eval; cả hai đều đạt 0/9 và 0/12 check quy ước. Vì vậy curator chưa tạo cải thiện quan sát được cho nhóm nào. Ba quy ước mới chỉ có ở eval—`rule_version_bump`, `rule_sorted_keys_format`, `rule_source_line`—đều thất bại; skill không chứa các quy tắc chưa từng xuất hiện này, và ngay cả quy tắc cũ được skill ghi lại cũng không được áp dụng vì agent không đọc skill.
+
+3. Không có check nào có thể quy công cho skill một cách hợp lệ. Ví dụ `duplicate_events_removed` đạt ở `skills-auto/data-eval`, nhưng trace cho thấy agent tự đọc đề/dữ liệu rồi viết vòng lặp `seen_ids`; baseline cũng đạt check này và `skills_read=0`, nên đây là năng lực nền. Ngược lại, `rule_money_in_cents` thất bại dù `structured-data-cleaning-and-validation-checklist` có hướng dẫn chuyển tiền sang cents: trace không có lần đọc `skills/...`, output vẫn dùng số thực và thiếu các artifact quy ước. Cơ chế chính là lỗi kích hoạt/retrieval, chưa phải bằng chứng nội dung skill bị đọc rồi làm sai.
+
+4. Trung bình trên sáu tác vụ, baseline dùng 38.339 token/lượt, subagents 45.077 (+17,6%) và skills-auto 49.046 (+27,9%). Nếu chuẩn hóa bằng số check đạt trên toàn bộ 230.036, 270.462 và 294.276 token, hiệu suất lần lượt là khoảng 0,096, 0,070 và 0,075 check đạt trên 1.000 token; baseline tốt nhất. Riêng tập học, subagents tốn hơn baseline 49% nhưng còn mất một check; trên eval nó dùng ít token hơn (32.826 so với 38.122 mỗi lượt) nhưng cũng chỉ đạt 8/30 thay vì 10/30. Với mức sử dụng subagent thấp và không tăng điểm, đa tác tử không đáng chi phí trong thí nghiệm này.
+
+5. Không có dấu hiệu rò rỉ eval vào skill: H1–H3 ở commit `435a066`, skill được khóa tại tag `freeze` (`cc618b2`), không có eval nào được mở/chạy trước đó, diff skill sau tag rỗng và `verify_freeze.py` báo OK. Ba skill không chứa task id, tên file hay đáp án eval và sáu lượt dùng cùng hash. Tuy vậy có rủi ro quá khớp về nội dung: các checklist ghi chính xác quy ước học như cents, `meta`, changelog và schema header nhưng không thể biết ba quy ước mới của eval. Kết quả 0/12 house rule eval phù hợp với rủi ro chuyển giao này, song `skills_read=0` khiến thí nghiệm chưa tách được “skill quá khớp” khỏi “skill không được kích hoạt”.
+
+6. Snapshot CP3 `results/skills-auto-dev/` và replay sau freeze dùng cùng hash, cùng đạt `code=6/10`, `data=5/8`, `logs=1/9`, tức chênh lệch điểm bằng 0 ở cả ba tác vụ và tổng vẫn 12/27. Token trung bình giảm từ 58.944 xuống 55.043, chênh 3.901 token (-6,6%), cho thấy đường chạy vẫn biến động dù điểm rời rạc không đổi. Không quan sát thấy nhiễu điểm trong ba cặp này không chứng minh hệ thống tất định; với một mẫu mỗi cấu hình, các chênh lệch nhỏ một check vẫn cần nhiều lần lặp mới có thể xem là ổn định.
 
 ## 9. Hạn chế và tính hợp lệ
 
-> Nêu ít nhất 3 hạn chế và ảnh hưởng của từng hạn chế đến kết luận (ví dụ: chỉ 3 tác vụ mỗi vai trò, mỗi cấu hình chạy một lần, nhiễu của mô hình, tác vụ do giảng viên thiết kế sẵn quy ước, chỉ một mô hình).
-
-1.
-2.
-3.
+1. Mỗi vai trò chỉ có ba tác vụ thuộc ba họ code, data và log. Mẫu nhỏ làm một check có thể thay đổi trung bình đáng kể và không cho phép suy rộng sang workflow khác.
+2. Mỗi cặp điều kiện–tác vụ chỉ có một artifact hợp lệ. Nhiệt độ 0 không loại bỏ biến động do vòng lặp agent/tool; replay giữ điểm nhưng lệch 6,6% token, còn một lượt `baseline/data-eval` từng chạm recursion trước khi lần chạy lại hợp lệ đạt 3/9.
+3. Thí nghiệm chính chỉ dùng `gpt-4.1-mini` với một phiên bản Deep Agents. Kết luận về retrieval, delegation và chi phí có thể đổi với model hoặc harness khác; archive `gpt-4o-mini` chỉ là thăm dò, không phải đối chứng chuẩn hóa.
+4. House rules do benchmark cố ý giấu khỏi đề. Thiết kế này đo khả năng chuyển tri thức ngoài đề rất rõ, nhưng làm baseline không có con đường trực tiếp để suy ra 9 quy tắc learn và 12 quy tắc eval, nên không đại diện cho mọi dự án có tài liệu tổ chức đầy đủ.
+5. Agent không đọc bất kỳ skill nào. Do đó kết quả đo toàn bộ pipeline gồm discovery/kích hoạt, nhưng không đo riêng chất lượng nội dung khi skill thực sự được sử dụng; không thể kết luận “skill vô ích” chỉ từ điểm hòa baseline.
+6. Điều kiện subagents hiếm khi delegate và không dùng ba vai trò tùy chỉnh: 1/3 lượt learn và 2/3 lượt eval có gọi subagent, cả ba lần đều dùng `general-purpose`. Vì thế kết quả chủ yếu phản ánh quyết định không/ít giao việc của model, không phải trần năng lực của kiến trúc đa tác tử.
 
 ## 10. Kết luận
 
-> Tối đa 5 câu. Chỉ khẳng định điều số liệu hỗ trợ. Nêu một đề xuất cải tiến tiếp theo.
+Trong sáu tác vụ, baseline đạt 22/57 check với chi phí thấp nhất; subagents đạt 19/57 và skills-auto đạt 22/57. Trên eval, skills-auto hòa baseline ở 0,33 và cả ba điều kiện đều đạt 0/12 house rules. Vì `skills_read=0` ở mọi lượt, kết quả không chứng minh nội dung skill không tốt mà chỉ chứng minh cơ chế hiện tại không chuyển được skill thành hành vi quan sát được. Đa tác tử cũng không đem lại lợi ích điểm đủ bù chi phí trong cấu hình này. Bước tiếp theo nên thêm router bắt buộc chọn và đọc skill liên quan trước hành động đầu tiên, rồi chạy đối chứng forced-read/không-skill qua nhiều seed để tách chất lượng skill khỏi lỗi kích hoạt.
 
 ## Phụ lục
 
 - Lệnh đã chạy (theo thứ tự): vòng thăm dò `gpt-4o-mini` được lưu archive; đổi `LAB_MODEL=openai:gpt-4.1-mini`; smoke test; chạy từng task học baseline và subagents với `--recursion-limit 40`; chạy curator lần cuối; đánh giá ba skill; chạy từng task học `skills-auto`; sao lưu `results/skills-auto-dev`; commit `hypotheses`; commit/tag `freeze`; chạy `baseline --tasks eval`, `subagents --tasks eval`, `skills-auto --tasks all`; chạy lại riêng `baseline/data-eval` bị recursion theo GUIDE; chạy `verify_freeze.py`, `lab.compare`, `check_breakdown.py` và `pytest`.
-- Thử thách mở rộng (nếu có): hướng chọn, kết quả, nhận xét.
+- Thử thách mở rộng: không thực hiện; mọi số liệu trong bảng thuộc thí nghiệm chính.
 - Ghi chú khác: không mở hoặc chạy bất kỳ tác vụ `*-eval` nào trước commit/tag đóng băng. Kết quả chính chỉ dùng `gpt-4.1-mini`; dữ liệu thăm dò model cũ nằm trong `results/gpt-4o-mini-archive/` và không dùng để kết luận chính.
