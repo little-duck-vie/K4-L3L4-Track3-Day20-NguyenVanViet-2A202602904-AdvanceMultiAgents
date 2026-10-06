@@ -4,10 +4,12 @@ Pseudo-code: guides/pseudocode/04_curator.md
 Kiểm tra:    pytest tests/test_04_curator.py
 Chạy thật:   python -m lab.curator
 """
+import json
 import re
 from pathlib import Path
 
-from .tasks import eval_markers   # có sẵn: định danh của tác vụ đánh giá, tính lúc chạy
+from .model import make_model
+from .tasks import ROOT, eval_markers   # có sẵn: định danh của tác vụ đánh giá, tính lúc chạy
 
 # ---- CÓ SẴN, KHÔNG SỬA: kiểm tra và tách khối skill (phần dễ sai và liên quan bảo mật) ----------------
 SAFE_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -68,7 +70,96 @@ def curate_skills(results_dir="results", source_condition="baseline", out_dir=No
     model mặc định: make_model() (lab.model).
     Trả về: danh sách đường dẫn SKILL.md đã ghi.
     """
-    raise NotImplementedError("TODO: cài đặt curate_skills (xem guides/pseudocode/04_curator.md)")
+    results_path = Path(results_dir) / source_condition
+    output_path = Path(out_dir) if out_dir is not None else ROOT / "skills" / "auto"
+    runs = []
+
+    for run_path in sorted(results_path.glob("*/run.json")):
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        if run.get("role") != "learn":
+            continue
+
+        failed = [
+            {
+                "name": str(check.get("name", "")),
+                "detail": str(check.get("detail", "")),
+            }
+            for check in run.get("checks", [])
+            if not check.get("passed", False)
+        ]
+        trace_path = run_path.with_name("trace.md")
+        trace = trace_path.read_text(encoding="utf-8")[-6000:] if trace_path.exists() else ""
+        runs.append({
+            "task": str(run.get("task", run_path.parent.name)),
+            "failed": failed,
+            "trace": trace,
+        })
+
+    if not any(run["failed"] for run in runs):
+        print("Warning: no failed checks in learning tasks; no skills were generated.")
+        return []
+
+    run_sections = []
+    for run in runs:
+        failed_lines = "\n".join(
+            f"- {check['name']}: {check['detail']}" for check in run["failed"]
+        ) or "- None"
+        run_sections.append(
+            f"## Learning run: {run['task']}\n"
+            f"Failed checks and reviewer feedback:\n{failed_lines}\n\n"
+            f"End of execution trace:\n{run['trace']}"
+        )
+
+    prompt = f"""You write reusable SKILL files for a programming and data-analysis agent.
+Below are failed checks, reviewer feedback, and execution traces from LEARNING tasks only.
+Find general process failures rather than task-specific answers, and write at most {max_skills} concise skills
+that help on NEW tasks of the same broad kinds.
+
+Selection strategy:
+- Cover distinct task families. When the evidence includes Python package repair, structured-data analysis,
+  and log parsing, prefer one broadly triggered checklist for each family instead of several symptom-specific skills.
+- Ignore infrastructure aftermath. A missing output after an aborted or recursion-limited run is not evidence that
+  the agent needs generic exception handling; teach the end-to-end workflow that creates and validates the output.
+- Combine related technical failures and reviewer RULE feedback into the same family checklist.
+- Make each description start with "Use whenever" and name broad observable task signals so the agent will select
+  the skill even when a hidden organizational convention is not stated in the user request.
+
+Rules:
+- Generalize: do not mention task ids, task-specific input filenames, function names, input columns, or computed answers.
+- Organizational conventions explicitly stated in reviewer feedback may be preserved in general form, including
+  required output artifacts, schema keys, normalization, ordering, tests, and changelog rules. Do not invent rules.
+- Each skill must have YAML frontmatter with `name` (lower-case words separated by hyphens) and `description`
+  (one sentence explaining WHEN TO USE IT), followed by no more than 40 lines of imperative instructions.
+- Prefer short, imperative, testable checklists: inspect all relevant inputs/specifications, implement robustly,
+  then run validation and verify every required output before claiming completion.
+- Never mention evaluation tasks or evaluation-only material.
+- Use exactly this output format for every skill:
+=== SKILL: <name> ===
+---
+name: <name>
+description: <when to use it>
+---
+<instructions>
+=== END ===
+
+{chr(10).join(run_sections)}
+"""
+
+    selected_model = model if model is not None else make_model()
+    reply = selected_model.invoke(prompt).content
+    written = []
+    for name, text in parse_skill_blocks(str(reply)):
+        if len(written) >= max_skills:
+            break
+        problems = validate_skill(text, expected_name=name)
+        if problems:
+            print(f"Skipping invalid skill {name!r}: {', '.join(problems)}")
+            continue
+        skill_path = output_path / name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True, exist_ok=True)
+        skill_path.write_text(text.rstrip() + "\n", encoding="utf-8")
+        written.append(skill_path)
+    return written
 
 
 if __name__ == "__main__":
