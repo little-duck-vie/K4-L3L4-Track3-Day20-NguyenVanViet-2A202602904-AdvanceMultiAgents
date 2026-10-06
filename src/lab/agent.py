@@ -92,8 +92,8 @@ def build_agent(sandbox: Path, mode: str = "single", use_skills: bool = False, m
       mode:       "single"    -> tác tử mặc định (có subagent `general-purpose` sẵn của Deep Agents)
                   "subagents" -> thêm các subagent từ `get_subagents()` (nối PATHS_NOTE vào `system_prompt` của MỖI subagent,
                                  vì subagent không nhận BASE_PROMPT) và thêm SUBAGENTS_NOTE vào prompt chính
-      use_skills: True -> nạp thư mục "/skills/" qua tham số `skills=` của create_deep_agent
-                  và thêm SKILLS_NOTE vào prompt.
+      use_skills: True -> nạp thư mục "/skills/" qua tham số `skills=` của create_deep_agent,
+                  thêm SKILLS_NOTE vào prompt và, ở mode "subagents", cấp cùng skill cho subagent tùy chỉnh.
       model:      mô hình ngôn ngữ; None -> dùng `make_model()`.
     mode không hợp lệ -> ném ValueError.
     Trả về: đồ thị (graph) đã biên dịch, gọi bằng `.invoke({"messages": [...]})`.
@@ -105,10 +105,19 @@ def build_agent(sandbox: Path, mode: str = "single", use_skills: bool = False, m
     prompt = BASE_PROMPT
 
     if mode == "subagents":
-        kwargs["subagents"] = [
-            {**subagent, "system_prompt": subagent["system_prompt"] + " " + PATHS_NOTE}
-            for subagent in get_subagents()
-        ]
+        configured_subagents = []
+        for subagent in get_subagents():
+            configured = {
+                **subagent,
+                "system_prompt": subagent["system_prompt"] + " " + PATHS_NOTE,
+            }
+            # Optional extension 6d: when the parent receives the frozen skill
+            # library, expose the same library to every specialised subagent.
+            if use_skills:
+                configured["skills"] = ["/skills/"]
+                configured["system_prompt"] += SKILLS_NOTE
+            configured_subagents.append(configured)
+        kwargs["subagents"] = configured_subagents
         prompt += SUBAGENTS_NOTE
 
     if use_skills:

@@ -8,7 +8,7 @@
 
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: OpenAI, `openai:gpt-4.1-mini`, nhiệt độ 0, `recursion_limit=40`. Vòng thăm dò bằng `gpt-4o-mini` bị loại khỏi kết quả chính và lưu trong `results/gpt-4o-mini-archive/` vì model thường bỏ qua skill và hai lần bị recursion.
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: Deep Agents 0.7.21; Windows, chạy trực tiếp trong `.venv`.
-- Số lần chạy tác vụ đã dùng / ngân sách: 33 lượt task hoàn tất, ba lượt bị ngắt hoặc lỗi, hai smoke test và ba lần chạy curator. Mười tám artifact kết quả chính hiện hành dùng 794.774 token; tính cả các lượt đã bị ghi đè, tổng task token quan sát được ít nhất 2.391.602, chưa gồm curator và lượt bị ngắt không ghi đủ usage.
+- Số lần chạy tác vụ đã dùng / ngân sách: 36 lượt task hoàn tất, ba lượt bị ngắt hoặc lỗi, hai smoke test và ba lần chạy curator. Mười tám artifact kết quả chính hiện hành dùng 794.774 token; ba lượt mở rộng dùng thêm 178.836 token. Tính cả các lượt đã bị ghi đè, tổng task token quan sát được ít nhất 2.570.438, chưa gồm curator và lượt bị ngắt không ghi đủ usage.
 - Commit của tag `freeze`: `cc618b2` (`freeze skills`); commit giả thuyết ngay trước đó là `435a066` (`hypotheses`).
 
 ## 2. Giả thuyết (commit TRƯỚC tag `freeze`, Phần 4.0)
@@ -122,6 +122,23 @@ Trong sáu tác vụ, baseline đạt 22/57 check với chi phí thấp nhất; 
 
 ## Phụ lục
 
-- Lệnh đã chạy (theo thứ tự): vòng thăm dò `gpt-4o-mini` được lưu archive; đổi `LAB_MODEL=openai:gpt-4.1-mini`; smoke test; chạy từng task học baseline và subagents với `--recursion-limit 40`; chạy curator lần cuối; đánh giá ba skill; chạy từng task học `skills-auto`; sao lưu `results/skills-auto-dev`; commit `hypotheses`; commit/tag `freeze`; chạy `baseline --tasks eval`, `subagents --tasks eval`, `skills-auto --tasks all`; chạy lại riêng `baseline/data-eval` bị recursion theo GUIDE; chạy `verify_freeze.py`, `lab.compare`, `check_breakdown.py` và `pytest`.
-- Thử thách mở rộng: không thực hiện; mọi số liệu trong bảng thuộc thí nghiệm chính.
+- Lệnh đã chạy (theo thứ tự): vòng thăm dò `gpt-4o-mini` được lưu archive; đổi `LAB_MODEL=openai:gpt-4.1-mini`; smoke test; chạy từng task học baseline và subagents với `--recursion-limit 40`; chạy curator lần cuối; đánh giá ba skill; chạy từng task học `skills-auto`; sao lưu `results/skills-auto-dev`; commit `hypotheses`; commit/tag `freeze`; chạy `baseline --tasks eval`, `subagents --tasks eval`, `skills-auto --tasks all`; chạy lại riêng `baseline/data-eval` bị recursion theo GUIDE; chạy `verify_freeze.py`, `lab.compare`, `check_breakdown.py` và `pytest`; chạy `python experiments/run_subagents_with_skills.py` và `python experiments/summarize_extension_6d.py`.
 - Ghi chú khác: không mở hoặc chạy bất kỳ tác vụ `*-eval` nào trước commit/tag đóng băng. Kết quả chính chỉ dùng `gpt-4.1-mini`; dữ liệu thăm dò model cũ nằm trong `results/gpt-4o-mini-archive/` và không dùng để kết luận chính.
+
+### Thử thách mở rộng 6d: subagent có skill
+
+**Thiết kế.** Khi đồng thời bật subagents và skill, harness thêm `skills: ["/skills/"]` cùng chỉ dẫn đọc skill vào từng subagent tùy chỉnh; subagent mặc định của Deep Agents kế thừa skill middleware từ tác tử chính. Runner riêng đăng ký `subagents-skills` chỉ trong tiến trình thí nghiệm, dùng đúng skill đã đóng băng, model và `recursion_limit=40`, rồi ghi ba lượt eval vào `results/extension-6d/`. Vì `lab.compare` chỉ nhận ba điều kiện chính, kết quả mở rộng không thể làm đổi bảng ở mục 7.
+
+| Task/metric | subagents | skills-auto | subagents-skills |
+|---|---:|---:|---:|
+| `code-eval` | 6/11 | 6/11 | 6/11 |
+| `data-eval` | 1/9 | 3/9 | 1/9 |
+| `logs-eval` | 1/10 | 1/10 | 1/10 |
+| Điểm eval trung bình | 0,25 | 0,33 | 0,25 |
+| Token trung bình/lượt | 32.826,3 | 43.048,7 | 59.612,0 |
+| Tổng số lần gọi subagent | 2 | 0 | 0 |
+| Lần đọc skill thấy trong main trace | 0 | 0 | 0 |
+
+**Kết quả và cơ chế.** `subagents-skills` đạt 8/30 check, bằng subagents thường và thấp hơn skills-auto 10/30, nhưng tốn 178.836 token, tức 59.612 token/lượt—cao hơn subagents 81,6% và skills-auto 38,5%. Cả ba `run.json` đều có `subagent_calls=0`, `skills_read=0`, `skills_modified=false` và hash `c766b8663086a5af3a71edfeeeff6329bf7df564e7b3b283a9e43b82322cec0d`. Trace không có tool call `task` hay đường dẫn `skills/`: model tự xử lý như single agent, nên quyền đọc skill của subagent không bao giờ được sử dụng. Việc code vẫn đạt 6/11 đến từ sửa lỗi công khai và chạy ba test thành công; các house rules tiếp tục thất bại, phù hợp với cơ chế không kích hoạt chứ không chứng minh skill subagent sai.
+
+**Hạn chế và bước tiếp theo.** Mỗi task chỉ chạy một lần; `skills_read` vốn chỉ đo main trace và không nhìn thấy thao tác bên trong subagent. Tuy nhiên trong ba lượt này `subagent_calls=0`, nên chắc chắn không có subagent nào được tạo để đọc skill. Thí nghiệm tiếp theo nên dùng router bắt buộc giao ít nhất một bước cho subagent phù hợp, bổ sung telemetry cho tool call nội bộ của subagent, rồi so sánh ba nhánh: subagent không skill, subagent có skill và forced-read qua nhiều seed.
